@@ -9,7 +9,7 @@ import utils
 import ontology
 from copy import deepcopy
 from collections import OrderedDict
-from data.dataset.multiwoz20.db_ops import MultiWozDB
+from data.dataset.multiwoz.utils.db_ops import MultiWozDB
 from torch.utils.data import Dataset, DataLoader
 import progressbar
 

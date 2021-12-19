@@ -409,7 +409,7 @@ class DataPreprocessor(object):
                 # for user turn, have text
                 # sys turn: text, belief states(metadata), dialog_act, span_info
                 dial_state = dial_turn['metadata']
-                if version="2.2":
+                if self.version=="2.2":
                     if dial_turn['span_info'] != []:
                         for i in range(len(dial_turn['span_info'])):
                             dial_turn['span_info'][i][3], dial_turn['span_info'][i][4] = self.char2word(dial_turn['text'], dial_turn['span_info'][i][3], dial_turn['span_info'][i][4])
@@ -435,7 +435,7 @@ class DataPreprocessor(object):
                             print(fn)
                         s_delex = self.delex_by_valdict(dial_turn['text'])
                     single_turn['resp'] = s_delex
-                    if version="2.2":
+                    if self.version=="2.2":
                         single_turn['nodelx_resp'] = ' '.join(clean_text(dial_turn['text']).split())
                     # get belief state, semi=informable/book=requestable, put into constraint_dict
                     for domain in dial_domains:
@@ -443,7 +443,7 @@ class DataPreprocessor(object):
                             constraint_dict[domain] = OrderedDict()
                         info_sv = dial_state[domain]['semi']
                         for s,v in info_sv.items():
-                            if version="2.2":
+                            if self.version=="2.2":
                                 if v == []:
                                     v = ""
                                 elif type(v) == list:
@@ -457,7 +457,7 @@ class DataPreprocessor(object):
                         for s,v in book_sv.items():
                             if s == 'booked':
                                 continue
-                            if version="2.2":
+                            if self.version=="2.2":
                                 if v == []:
                                     v = ""
                                 elif type(v) == list:
@@ -604,7 +604,7 @@ class DataPreprocessor(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Argument for preprocessing")
-    parser.add_argument("--version", type=str, required=True, choices=["2.0", "2.1"])
+    parser.add_argument("--version", type=str, required=True, choices=["2.0", "2.1", "2.2"])
     args = parser.parse_args()
 
     cfg = Config(args.version)

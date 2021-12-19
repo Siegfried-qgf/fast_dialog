@@ -1,5 +1,5 @@
-CUDA_VISIBLE_DEVICES=4 python ../../../learn.py\
-    --data_path_prefix ../../../../../data/dataset/multiwoz/MultiWOZ_2.0\
+CUDA_VISIBLE_DEVICES=1 python ../../../learn.py\
+    --data_path_prefix ../../../../../data/dataset/multiwoz/MultiWOZ_2.1\
     --model_name t5-large\
     --pretrained_path ../../../checkpoints/large/\
     --ckpt_save_path ../../../ckpt/large/full_training/\

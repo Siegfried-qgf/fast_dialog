@@ -152,7 +152,7 @@ def analysis(data_path, save_path, save_path_exp, data_file):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Argument for preprocessing")
-    parser.add_argument("--version", type=str, required=True, choices=["2.0", "2.1"])
+    parser.add_argument("--version", type=str, required=True, choices=["2.0", "2.1", "2.2"])
     args = parser.parse_args()
 
     if args.version == "2.0":
@@ -160,7 +160,8 @@ if __name__ == '__main__':
     elif args.version == "2.1":
         data_path = './../MultiWOZ_2.1'
     elif args.version == "2.2":
-        data_path = './../MultiWOZ_2.1'
+        data_path = './../MultiWOZ_2.2'
+
 
     data_file = 'data.json'
     save_path = data_path + '/multi-woz-analysis/'

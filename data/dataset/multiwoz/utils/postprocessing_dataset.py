@@ -167,13 +167,15 @@ if __name__ == '__main__':
     from config import Config
 
     parser = argparse.ArgumentParser(description="Argument for preprocessing")
-    parser.add_argument("--version", type=str, required=True, choices=["2.0", "2.1"])
+    parser.add_argument("--version", type=str, required=True, choices=["2.0", "2.1","2.2"])
     args = parser.parse_args()
 
     if args.version == '2.0':
         data_prefix = './../MultiWOZ_2.0'
     elif args.version == '2.1':
         data_prefix = './../MultiWOZ_2.1'
+    elif args.version == '2.2':
+        data_prefix = './../MultiWOZ_2.2'
 
     cfg = Config(args.version)
 
