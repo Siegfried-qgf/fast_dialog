@@ -7,7 +7,9 @@ from torch import nn
 from torch.autograd import Variable
 from torch.distributions import Categorical
 import utils
-from config.config_ubar import global_config as cfg
+import sys
+sys.path.append("../..")
+from config.config_ubar import global_config21 as cfg
 
 np.set_printoptions(precision=2,suppress=True)
 

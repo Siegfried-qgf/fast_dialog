@@ -1,13 +1,5 @@
 import os, random, argparse, time, logging, json, tqdm, sys
 import numpy as np
-
-os.chdir('/remote-home/yjzheng/dialogue/PTM-based-E2E/')
-base_path = os.getcwd()
-sys.path.append(base_path)
-
-from transformers.optimization import AdamW, get_linear_schedule_with_warmup
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Model
-from evaluator.eval import MultiWozEvaluator
 from damd_net import DAMD, cuda_, get_one_hot_input
 from reader import MultiWozReader
 import utils
@@ -18,7 +10,15 @@ import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from config.config_ubar import global_config as cfg
+from transformers.optimization import AdamW, get_linear_schedule_with_warmup
+from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Model
+import sys
+sys.path.append("../..")
+from evaluator.eval import MultiWozEvaluator
+sys.path.append("../..")
+from config.config_ubar import global_config21 as cfg
+
+
 # from config21 import global_config as cfg  # global, already initialized
 
 
@@ -42,7 +42,7 @@ class Modal(object):
             self.model.resize_token_embeddings(len(self.tokenizer))
         self.model.to(self.device)  # single gpu
         #
-        self.evaluator = MultiWozEvaluator(self.reader)
+        self.evaluator = MultiWozEvaluator(self.reader,cfg)
         if cfg.save_log and cfg.mode == 'train':
             self.tb_writer = SummaryWriter(log_dir='./log')
         else:

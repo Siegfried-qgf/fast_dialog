@@ -1,11 +1,10 @@
 import math, logging, copy, json
 from collections import Counter, OrderedDict
 from nltk.util import ngrams
-from fast_dialog.evaluator.clean_dataset import clean_slot_values
 
-import sys
-sys.path.append('..')
-from fast_dialog.model.pptod import ontology
+import ontology
+from config.config_dmad import global_config as cfg
+from evaluator.clean_dataset import clean_slot_values #TODO clean_dataset 重复
 
 class BLEUScorer(object):
     ## BLEU score calculator via GentScorer interface
