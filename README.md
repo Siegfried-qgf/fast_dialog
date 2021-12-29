@@ -18,3 +18,5 @@ under the Same Context](https://arxiv.org/pdf/1911.10484.pdf)
 
 ## Training
 **PPTOD_small**: fast_dialog/model/pptod/: ./pptod_small_train_full_training.sh
+**PPTOD_base**: fast_dialog/model/pptod/: ./pptod_base_train_full_training.sh
+**PPTOD_large**: fast_dialog/model/pptod/: ./pptod_large_train_full_training.sh
