@@ -9,10 +9,10 @@ import utils
 import ontology
 from copy import deepcopy
 from collections import OrderedDict
-from data.dataset.multiwoz20.db_ops import MultiWozDB
+from data.dataset.multiwoz.utils.db_ops import MultiWozDB
 from torch.utils.data import Dataset, DataLoader
 
-from config.config_ubar import global_config as cfg
+from config.config_ubar import global_config21 as cfg
 # from config21 import global_config as cfg
 
 class _ReaderBase(object):

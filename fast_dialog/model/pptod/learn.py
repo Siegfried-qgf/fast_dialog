@@ -68,13 +68,28 @@ def distributed_concat(result_list, num_total_examples):
 def parse_dataset(args):
     if args.dataset_name == 'MultiWOZ_2.0':
         args.data_path_prefix = '../../data/dataset/multiwoz/MultiWOZ_2.0'
-        args.ckpt_save_path = './ckpt/MultiWOZ_2.0/small/full_training/'
+        if args.model_name == 't5-small':
+            args.ckpt_save_path = './ckpt/MultiWOZ_2.0/small/full_training/'
+        elif args.model_name == 't5-base':
+            args.ckpt_save_path = './ckpt/MultiWOZ_2.0/base/full_training/'
+        elif args.model_name == 't5-large':
+            args.ckpt_save_path = './ckpt/MultiWOZ_2.0/large/full_training/'
     elif args.dataset_name == 'MultiWOZ_2.1':
         args.data_path_prefix = '../../data/dataset/multiwoz/MultiWOZ_2.1'
-        args.ckpt_save_path = './ckpt/MultiWOZ_2.1/small/full_training/'
+        if args.model_name == 't5-small':
+            args.ckpt_save_path = './ckpt/MultiWOZ_2.1/small/full_training/'
+        elif args.model_name == 't5-base':
+            args.ckpt_save_path = './ckpt/MultiWOZ_2.1/base/full_training/'
+        elif args.model_name == 't5-large':
+            args.ckpt_save_path = './ckpt/MultiWOZ_2.1/large/full_training/'
     elif args.dataset_name == 'MultiWOZ_2.2':
         args.data_path_prefix = '../../data/dataset/multiwoz/MultiWOZ_2.2'
-        args.ckpt_save_path = './ckpt/MultiWOZ_2.2/small/full_training/'
+        if args.model_name == 't5-small':
+            args.ckpt_save_path = './ckpt/MultiWOZ_2.2/small/full_training/'
+        elif args.model_name == 't5-base':
+            args.ckpt_save_path = './ckpt/MultiWOZ_2.2/base/full_training/'
+        elif args.model_name == 't5-large':
+            args.ckpt_save_path = './ckpt/MultiWOZ_2.2/large/full_training/'
     else:
         raise Exception('暂时还没这个数据集')
 

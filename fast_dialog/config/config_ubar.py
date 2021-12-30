@@ -1,38 +1,39 @@
 import logging, time, os
 
 class _Config:
-    def __init__(self):
-        self._multiwoz_damd_init()
+    def __init__(self,data_prefix):
+        self._multiwoz_damd_init(data_prefix)
+        self.data_prefix = data_prefix
 
-    def _multiwoz_damd_init(self):
+    def _multiwoz_damd_init(self,data_prefix):
         self.gpt_path = 'distilgpt2'
-
-        self.vocab_path_train = 'data/dataset/multiwoz20/data/multi-woz-processed/vocab'
+        self.data_prefix = data_prefix
+        self.vocab_path_train = self.data_prefix + '/multi-woz-processed/vocab'
         self.vocab_path_eval = None
-        self.data_path = 'data/dataset/multiwoz20/data/multi-woz-processed/'
+        self.data_path = self.data_prefix + '/multi-woz-processed/'
         self.data_file = 'data_for_damd.json'
-        self.dev_list = 'data/dataset/multiwoz20/data/multi-woz/valListFile.json'
-        self.test_list = 'data/dataset/multiwoz20/data/multi-woz/testListFile.json'
+        self.dev_list = self.data_prefix + '/valListFile.json'
+        self.test_list = self.data_prefix + '/testListFile.json'
         self.dbs = {
-            'attraction': 'data/dataset/multiwoz20/db/attraction_db_processed.json',
-            'hospital': 'data/dataset/multiwoz20/db/hospital_db_processed.json',
-            'hotel': 'data/dataset/multiwoz20/db/hotel_db_processed.json',
-            'police': 'data/dataset/multiwoz20/db/police_db_processed.json',
-            'restaurant': 'data/dataset/multiwoz20/db/restaurant_db_processed.json',
-            'taxi': 'data/dataset/multiwoz20/db/taxi_db_processed.json',
-            'train': 'data/dataset/multiwoz20/db/train_db_processed.json',
+            'attraction': self.data_prefix + '/db/attraction_db_processed.json',
+            'hospital': self.data_prefix + '/db/hospital_db_processed.json',
+            'hotel': self.data_prefix + '/db/hotel_db_processed.json',
+            'police': self.data_prefix + '/db/police_db_processed.json',
+            'restaurant': self.data_prefix + '/db/restaurant_db_processed.json',
+            'taxi': self.data_prefix + '/db/taxi_db_processed.json',
+            'train': self.data_prefix + '/db/train_db_processed.json',
         }
         self.glove_path = './data/glove/glove.6B.50d.txt'
-        self.domain_file_path = 'data/dataset/multiwoz20/data/multi-woz-processed/domain_files.json'
-        self.slot_value_set_path = 'data/dataset/multiwoz20/db/value_set_processed.json'
-        self.multi_acts_path = 'data/dataset/multiwoz20/data/multi-woz-processed/multi_act_mapping_train.json'
+        self.domain_file_path = self.data_prefix + '/multi-woz-processed/domain_files.json'
+        self.slot_value_set_path = self.data_prefix + '/db/value_set_processed.json'
+        #self.multi_acts_path = 'data/dataset/multiwoz20/data/multi-woz-processed/multi_act_mapping_train.json'
         self.exp_path = 'to be generated'
         self.log_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
 
         # experiment settings
         self.mode = 'unknown'
         self.cuda = True
-        self.cuda_device = [3]
+        self.cuda_device = [4]
         self.exp_no = ''
         self.seed = 11
         self.save_log = True # tensorboard 
@@ -147,5 +148,8 @@ class _Config:
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
 
-global_config = _Config()
+global_config20 = _Config("../../data/dataset/multiwoz/MultiWOZ_2.0")
+global_config21 = _Config("../../data/dataset/multiwoz/MultiWOZ_2.1")
+global_config22 = _Config("../../data/dataset/multiwoz/MultiWOZ_2.2")
+
 
