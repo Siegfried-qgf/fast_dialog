@@ -258,7 +258,7 @@ if __name__ == '__main__':
             # dev_batch_list = data.build_all_evaluation_batch_list(ref_bs, ref_act, ref_db, input_contain_db, 
                 # eva_batch_size=args.number_of_gpu * args.batch_size_per_gpu, eva_mode='dev')
             dev_dataset = data.build_all_evaluation_batch_list(ref_bs, ref_act, ref_db, input_contain_db, 
-                eva_batch_size=args.number_of_gpu * args.batch_size_per_gpu, eva_mode='dev', for_dataloader=True)
+                eva_batch_size=args.number_of_gpu * args.batch_size_per_gpu, eva_mode='test', for_dataloader=True)
             eval_sampler = SequentialDistributedSampler(dataset=dev_dataset, batch_size=args.batch_size_per_gpu_eval)
             eval_dataloader = DataLoader(dev_dataset, sampler=eval_sampler, batch_size=args.batch_size_per_gpu_eval, collate_fn=collate_fn_eval)
             all_dev_result = []
