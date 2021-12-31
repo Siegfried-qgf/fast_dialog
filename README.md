@@ -17,6 +17,10 @@ under the Same Context](https://arxiv.org/pdf/1911.10484.pdf)
 **2.2**: fast_dialog/data/dataset/: ./MultiWOZ2.2_preparation.sh  
 
 ## Training
+### PPTOD
 **PPTOD_small**: fast_dialog/model/pptod/: ./pptod_small_train_full_training.sh  
 **PPTOD_base**: fast_dialog/model/pptod/: ./pptod_base_train_full_training.sh  
 **PPTOD_large**: fast_dialog/model/pptod/: ./pptod_large_train_full_training.sh
+
+### UBAR
+**UBAR**: fast_dialog/model/ubar/: ./train_ubar.sh
