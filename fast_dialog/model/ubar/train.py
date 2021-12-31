@@ -1,9 +1,6 @@
-import os, random, argparse, time, logging, json, tqdm, sys
+import os, random, argparse, time, logging, json, sys
 import numpy as np
-from damd_net import DAMD, cuda_, get_one_hot_input
 from reader import MultiWozReader
-import utils
-from torch.optim import Adam
 import torch
 import torch.nn as nn
 
@@ -11,30 +8,26 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from transformers.optimization import AdamW, get_linear_schedule_with_warmup
-from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Model
+from transformers import GPT2Tokenizer, GPT2LMHeadModel
 import sys
-sys.path.append("../..")
-from evaluator.eval import MultiWozEvaluator
-sys.path.append("../..")
-from config.config_ubar import global_config21 as cfg
-
-
-# from config21 import global_config as cfg  # global, already initialized
-
+sys.path.append('../../..')
+from fast_dialog.evaluator.eval import MultiWozEvaluator
+from fast_dialog.config.config_ubar import Config
 
 import warnings
 warnings.filterwarnings("ignore")
 
 
 class Modal(object):
-    def __init__(self, device):
+    def __init__(self, device, cfg):
+        self.cfg = cfg
         self.device = device
         # initialize tokenizer
         self.tokenizer = GPT2Tokenizer.from_pretrained(cfg.gpt_path)
         # cfg.tokenizer = tokenizer
 
         # initialize multiwoz reader
-        self.reader = MultiWozReader(self.tokenizer)
+        self.reader = MultiWozReader(self.tokenizer, cfg)
 
         # create model: gpt2
         self.model = GPT2LMHeadModel.from_pretrained(cfg.gpt_path)
@@ -61,17 +54,17 @@ class Modal(object):
         optimizer_grouped_parameters = [
             {
                 "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
-                "weight_decay": cfg.weight_decay,
+                "weight_decay": self.cfg.weight_decay,
             },
             {
                 "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
                 "weight_decay": 0.0,
             },
         ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=cfg.lr)
+        optimizer = AdamW(optimizer_grouped_parameters, lr=self.cfg.lr)
         num_training_steps = self.reader.set_stats['train']['num_dials'] *\
-            cfg.epoch_num // (cfg.gradient_accumulation_steps*cfg.batch_size)
-        num_warmup_steps = cfg.warmup_steps if cfg.warmup_steps >= 0 else int(num_training_steps*0.2)
+            self.cfg.epoch_num // (self.cfg.gradient_accumulation_steps*self.cfg.batch_size)
+        num_warmup_steps = self.cfg.warmup_steps if self.cfg.warmup_steps >= 0 else int(num_training_steps*0.2)
         scheduler = get_linear_schedule_with_warmup(
             optimizer, num_warmup_steps=num_warmup_steps,
             num_training_steps=num_training_steps
@@ -108,7 +101,7 @@ class Modal(object):
         shift_logits = lm_logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
 
-        pad_id = cfg.pad_id
+        pad_id = self.cfg.pad_id
         loss_fct = nn.CrossEntropyLoss(ignore_index=pad_id, reduction='sum')
         loss = loss_fct(
             shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
@@ -135,23 +128,23 @@ class Modal(object):
                      set_stats['num_training_steps_per_epoch'])
         logging.info("  Num Turns = %d", set_stats['num_turns'])
         logging.info("  Num Dialogs = %d", set_stats['num_dials'])
-        logging.info("  Num Epochs = %d", cfg.epoch_num)
-        logging.info("  Batch size  = %d", cfg.batch_size)
+        logging.info("  Num Epochs = %d", self.cfg.epoch_num)
+        logging.info("  Batch size  = %d", self.cfg.batch_size)
         logging.info("  Gradient Accumulation steps = %d",
-                     cfg.gradient_accumulation_steps)
+                     self.cfg.gradient_accumulation_steps)
         logging.info("  Total optimization steps = %d",
-                     set_stats['num_training_steps_per_epoch']*cfg.epoch_num // cfg.gradient_accumulation_steps)
+                     set_stats['num_training_steps_per_epoch']*self.cfg.epoch_num // self.cfg.gradient_accumulation_steps)
 
         # tb writer
         if self.tb_writer is not None:
-            self.tb_writer.add_text('cfg', json.dumps(cfg.__dict__, indent=2))
+            self.tb_writer.add_text('cfg', json.dumps(self.cfg.__dict__, indent=2))
             # self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
 
         log_inputs = 2
         global_step = 0
         sw = time.time()
 
-        for epoch in range(cfg.epoch_num):
+        for epoch in range(self.cfg.epoch_num):
             epoch_step = 0
             tr_loss = 0.0
             logging_loss = 0.0
@@ -188,7 +181,7 @@ class Modal(object):
                         epoch_step += 1
 
                         # step, wrt gradient_accumulation_steps, clip grad norm
-                        if (epoch_step+1) % cfg.gradient_accumulation_steps == 0 or(
+                        if (epoch_step+1) % self.cfg.gradient_accumulation_steps == 0 or(
                             # end of an epoch
                             (epoch_step + \
                             1) == set_stats['num_training_steps_per_epoch']
@@ -201,9 +194,9 @@ class Modal(object):
 
                             logs = {}  # for tb writer
                             # logging: loss, lr... after certain amount of steps
-                            if cfg.report_interval > 0 and global_step % cfg.report_interval == 0:
+                            if self.cfg.report_interval > 0 and global_step % self.cfg.report_interval == 0:
                                 loss_scalar = (tr_loss - logging_loss) / \
-                                    cfg.report_interval
+                                    self.cfg.report_interval
                                 logging_loss = tr_loss
                                 logs['loss'] = loss_scalar
                                 logging.info(
@@ -212,7 +205,7 @@ class Modal(object):
                                     ))
                                 # validate
                                 # add to tensorboard...
-                                if cfg.evaluate_during_training and loss_scalar < 10:
+                                if self.cfg.evaluate_during_training and loss_scalar < 10:
                                     results = self.validate()
                                     for k, v in results.items():
                                         eval_key = "eval_{}".format(k)
@@ -229,7 +222,7 @@ class Modal(object):
                             max_length = max(inputs['lengths'])
                             oom_time += 1
                             logging.info("WARNING: ran out of memory,times: {}, batch size: {}, max_len: {}".format(
-                                oom_time, cfg.batch_size, max_length))
+                                oom_time, self.cfg.batch_size, max_length))
                             if hasattr(torch.cuda, 'empty_cache'):
                                 torch.cuda.empty_cache()
                         else:
@@ -259,23 +252,23 @@ class Modal(object):
                      set_stats['num_training_steps_per_epoch'])
         logging.info("  Num Turns = %d", set_stats['num_turns'])
         logging.info("  Num Dialogs = %d", set_stats['num_dials'])
-        logging.info("  Num Epochs = %d", cfg.epoch_num)
-        logging.info("  Batch size  = %d", cfg.batch_size)
+        logging.info("  Num Epochs = %d", self.cfg.epoch_num)
+        logging.info("  Batch size  = %d", self.cfg.batch_size)
         logging.info("  Gradient Accumulation steps = %d",
-                     cfg.gradient_accumulation_steps)
+                     self.cfg.gradient_accumulation_steps)
         logging.info("  Total optimization steps = %d",
-                     set_stats['num_dials']*cfg.epoch_num // (cfg.gradient_accumulation_steps*cfg.batch_size))
+                     set_stats['num_dials']*self.cfg.epoch_num // (self.cfg.gradient_accumulation_steps*self.cfg.batch_size))
 
         # tb writer
         if self.tb_writer is not None:
-            self.tb_writer.add_text('cfg', json.dumps(cfg.__dict__, indent=2))
+            self.tb_writer.add_text('cfg', json.dumps(self.cfg.__dict__, indent=2))
             # self.tb_writer.add_hparams(self.args.to_sanitized_dict(), metric_dict={})
 
         log_inputs = 2
         global_step = 0
         sw = time.time()
 
-        for epoch in range(cfg.epoch_num):
+        for epoch in range(self.cfg.epoch_num):
             epoch_step = 0
             tr_loss = 0.0
             logging_loss = 0.0
@@ -286,76 +279,78 @@ class Modal(object):
             data_iterator = self.reader.get_nontranspose_data_iterator(
                 all_batches)
 
-            for batch_idx, dial_batch in enumerate(data_iterator):
-                inputs = self.reader.convert_batch_session(dial_batch)
-                try:  # avoid OOM
-                    self.model.train()
-                    if log_inputs > 0:  # log inputs for the very first two turns
-                        self.log_first_inputs(inputs)
-                        log_inputs -= 1
+            with tqdm(total=len(all_batches)) as pbar:
+                for dial_batch in data_iterator:
+                    inputs = self.reader.convert_batch_session(dial_batch)
+                    try:  # avoid OOM
+                        self.model.train()
+                        if log_inputs > 0:  # log inputs for the very first two turns
+                            self.log_first_inputs(inputs)
+                            log_inputs -= 1
 
-                    # to tensor
-                    inputs = self.add_torch_input(inputs)
-                    # loss
-                    outputs = self.model(inputs['contexts_tensor'])
-                    # outputs = self.model(inputs['contexts_tensor']) # debugging with GPT2Model
-                    loss = self.calculate_loss_and_accuracy(
-                        outputs, labels=inputs['contexts_tensor'])
-                    loss.backward()
-                    tr_loss += loss.item()
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), 5.0)
-                    epoch_step += 1
+                        # to tensor
+                        inputs = self.add_torch_input(inputs)
+                        # loss
+                        outputs = self.model(inputs['contexts_tensor'])
+                        # outputs = self.model(inputs['contexts_tensor']) # debugging with GPT2Model
+                        loss = self.calculate_loss_and_accuracy(
+                            outputs, labels=inputs['contexts_tensor'])
+                        loss.backward()
+                        tr_loss += loss.item()
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), 5.0)
+                        epoch_step += 1
 
-                    # step, wrt gradient_accumulation_steps, clip grad norm
-                    if (epoch_step+1) % cfg.gradient_accumulation_steps == 0 or(
-                        # end of an epoch
-                        (epoch_step + \
-                         1) == set_stats['num_training_steps_per_epoch']
-                    ):
-                        optimizer.step()
-                        scheduler.step()
-                        optimizer.zero_grad()
-                        # global_step: actual step the optimizer took
-                        global_step += 1
+                        # step, wrt gradient_accumulation_steps, clip grad norm
+                        if (epoch_step+1) % self.cfg.gradient_accumulation_steps == 0 or(
+                            # end of an epoch
+                            (epoch_step + \
+                            1) == set_stats['num_training_steps_per_epoch']
+                        ):
+                            optimizer.step()
+                            scheduler.step()
+                            optimizer.zero_grad()
+                            # global_step: actual step the optimizer took
+                            global_step += 1
 
-                        logs = {}  # for tb writer
-                        # logging: loss, lr... after certain amount of steps
-                        if cfg.report_interval > 0 and global_step % cfg.report_interval == 0:
-                            loss_scalar = (tr_loss - logging_loss) / \
-                                cfg.report_interval
-                            logging_loss = tr_loss
-                            logs['loss'] = loss_scalar
-                            logging.info(
-                                'Global step: {}, epoch step: {}, interval loss: {:.4f}'.format(
-                                    global_step, epoch_step, loss_scalar
-                                ))
-                            # validate
-                            # add to tensorboard...
-                            if cfg.evaluate_during_training and loss_scalar < 10:
-                                results = self.validate()
-                                for k, v in results.items():
-                                    eval_key = "eval_{}".format(k)
-                                    logs[eval_key] = v
+                            logs = {}  # for tb writer
+                            # logging: loss, lr... after certain amount of steps
+                            if self.cfg.report_interval > 0 and global_step % self.cfg.report_interval == 0:
+                                loss_scalar = (tr_loss - logging_loss) / \
+                                    self.cfg.report_interval
+                                logging_loss = tr_loss
+                                logs['loss'] = loss_scalar
+                                logging.info(
+                                    'Global step: {}, epoch step: {}, interval loss: {:.4f}'.format(
+                                        global_step, epoch_step, loss_scalar
+                                    ))
+                                # validate
+                                # add to tensorboard...
+                                if self.cfg.evaluate_during_training and loss_scalar < 10:
+                                    results = self.validate()
+                                    for k, v in results.items():
+                                        eval_key = "eval_{}".format(k)
+                                        logs[eval_key] = v
 
-                            if self.tb_writer:
-                                for k, v in logs.items():
-                                    self.tb_writer.add_scalar(
-                                        k, v, global_step)
-                            # save model... 
+                                if self.tb_writer:
+                                    for k, v in logs.items():
+                                        self.tb_writer.add_scalar(
+                                            k, v, global_step)
+                                # save model... 
 
-                except RuntimeError as exception:
-                    if "out of memory" in str(exception):
-                        max_length = max(inputs['lengths'])
-                        oom_time += 1
-                        logging.info("WARNING: ran out of memory,times: {}, batch size: {}, max_len: {}".format(
-                            oom_time, cfg.batch_size, max_length))
-                        if hasattr(torch.cuda, 'empty_cache'):
-                            torch.cuda.empty_cache()
-                    else:
-                        logging.info(str(exception))
-                        raise exception
-            logging.info('Train epoch time: {:.2f} min, epoch loss: {:.4f}'.format(
+                    except RuntimeError as exception:
+                        if "out of memory" in str(exception):
+                            max_length = max(inputs['lengths'])
+                            oom_time += 1
+                            logging.info("WARNING: ran out of memory,times: {}, batch size: {}, max_len: {}".format(
+                                oom_time, self.cfg.batch_size, max_length))
+                            if hasattr(torch.cuda, 'empty_cache'):
+                                torch.cuda.empty_cache()
+                        else:
+                            logging.info(str(exception))
+                            raise exception
+                    pbar.update(1)
+                logging.info('Train epoch time: {:.2f} min, epoch loss: {:.4f}'.format(
                 (time.time()-btm)/60, tr_loss))
             # save model after every epoch
             # if epoch > 10 or tr_loss/epoch_step < 1:
@@ -363,7 +358,7 @@ class Modal(object):
 
     def save_model(self, epoch, loss):
         save_path = os.path.join(
-            cfg.exp_path, 'epoch{}_trloss{:.2f}_gpt2'.format(epoch+1, loss))
+            self.cfg.exp_path, 'epoch{}_trloss{:.2f}_gpt2'.format(epoch+1, loss))
         if not os.path.exists(save_path):
             os.mkdir(save_path)
         logging.info('Saving model checkpoint to %s', save_path)
@@ -402,9 +397,9 @@ class Modal(object):
 
                     # fail to generate new tokens, if max_length not set
                     context_length = len(inputs['context'])
-                    if cfg.use_true_curr_bspn: # generate act, response
+                    if self.cfg.use_true_curr_bspn: # generate act, response
                         max_len=60
-                        if not cfg.use_true_curr_aspn:
+                        if not self.cfg.use_true_curr_aspn:
                             max_len = 80
 
                         outputs = self.model.generate(input_ids=inputs['context_tensor'],
@@ -432,7 +427,7 @@ class Modal(object):
                         # generated_bs = generated_bs[context_length-1:]
                         bspn_gen = self.decode_generated_bspn(generated_bs[context_length-1:])
                         # check DB result
-                        if cfg.use_true_db_pointer:
+                        if self.cfg.use_true_db_pointer:
                             # db_result = self.reader.bspan_to_DBpointer(self.tokenizer.decode(turn['bspn']), turn['turn_domain'])
                             db = turn['db']
                         else:
@@ -454,8 +449,8 @@ class Modal(object):
                             decoded = {'resp': [], 'bspn': [], 'aspn': []}
                     
                     turn['resp_gen'] = decoded['resp']
-                    turn['bspn_gen'] = turn['bspn'] if cfg.use_true_curr_bspn else decoded['bspn']
-                    turn['aspn_gen'] = turn['aspn'] if cfg.use_true_curr_aspn else decoded['aspn']
+                    turn['bspn_gen'] = turn['bspn'] if self.cfg.use_true_curr_bspn else decoded['bspn']
+                    turn['aspn_gen'] = turn['aspn'] if self.cfg.use_true_curr_aspn else decoded['aspn']
                     turn['dspn_gen'] = turn['dspn']
 
                     # check DB results
@@ -466,7 +461,7 @@ class Modal(object):
                     #     print('gt_resp: ', self.tokenizer.decode(turn['resp']), '\n')
 
                     pv_turn['labels'] = inputs['labels'] # all true previous context
-                    pv_turn['resp'] = turn['resp'] if cfg.use_true_prev_resp else decoded['resp']
+                    pv_turn['resp'] = turn['resp'] if self.cfg.use_true_prev_resp else decoded['resp']
                     # pv_turn['bspn'] = turn['bspn'] if cfg.use_true_prev_bspn else decoded['bspn']
                     # pv_turn['db'] = db
                     # pv_turn['aspn'] = turn['aspn'] if cfg.use_true_prev_aspn else decoded['aspn']
@@ -520,9 +515,9 @@ class Modal(object):
 
                     # fail to generate new tokens, if max_length not set
                     context_length = len(inputs['context'])
-                    if cfg.use_true_curr_bspn: # generate act, response
+                    if self.cfg.use_true_curr_bspn: # generate act, response
                         max_len=60
-                        if not cfg.use_true_curr_aspn:
+                        if not self.cfg.use_true_curr_aspn:
                             max_len = 80
 
                         outputs = self.model.generate(input_ids=inputs['context_tensor'],
@@ -550,7 +545,7 @@ class Modal(object):
                         # generated_bs = generated_bs[context_length-1:]
                         bspn_gen = self.decode_generated_bspn(generated_bs[context_length-1:])
                         # check DB result
-                        if cfg.use_true_db_pointer:
+                        if self.cfg.use_true_db_pointer:
                             # db_result = self.reader.bspan_to_DBpointer(self.tokenizer.decode(turn['bspn']), turn['turn_domain'])
                             db = turn['db']
                         else:
@@ -572,8 +567,8 @@ class Modal(object):
                             decoded = {'resp': [], 'bspn': [], 'aspn': []}
                     
                     turn['resp_gen'] = decoded['resp']
-                    turn['bspn_gen'] = turn['bspn'] if cfg.use_true_curr_bspn else decoded['bspn']
-                    turn['aspn_gen'] = turn['aspn'] if cfg.use_true_curr_aspn else decoded['aspn']
+                    turn['bspn_gen'] = turn['bspn'] if self.cfg.use_true_curr_bspn else decoded['bspn']
+                    turn['aspn_gen'] = turn['aspn'] if self.cfg.use_true_curr_aspn else decoded['aspn']
                     turn['dspn_gen'] = turn['dspn']
 
                     # check DB results
@@ -584,10 +579,10 @@ class Modal(object):
                     #     print('gt_resp: ', self.tokenizer.decode(turn['resp']), '\n')
 
                     pv_turn['labels'] = inputs['labels'] # all true previous context
-                    pv_turn['resp'] = turn['resp'] if cfg.use_true_prev_resp else decoded['resp']
-                    pv_turn['bspn'] = turn['bspn'] if cfg.use_true_prev_bspn else decoded['bspn']
-                    pv_turn['db'] = turn['db'] if cfg.use_true_curr_bspn else db
-                    pv_turn['aspn'] = turn['aspn'] if cfg.use_true_prev_aspn else decoded['aspn']
+                    pv_turn['resp'] = turn['resp'] if self.cfg.use_true_prev_resp else decoded['resp']
+                    pv_turn['bspn'] = turn['bspn'] if self.cfg.use_true_prev_bspn else decoded['bspn']
+                    pv_turn['db'] = turn['db'] if self.cfg.use_true_curr_bspn else db
+                    pv_turn['aspn'] = turn['aspn'] if self.cfg.use_true_prev_aspn else decoded['aspn']
 
                 result_collection.update(
                     self.reader.inverse_transpose_turn(dialog))
@@ -610,13 +605,13 @@ class Modal(object):
         eval_results['result'] = 'validation [CTR] match: %2.2f  success: %2.2f  bleu: %2.2f    score: %.2f' % (match, success, bleu, score)
 
         
-        model_setting, epoch_setting = cfg.eval_load_path.split('/')[1], cfg.eval_load_path.split('/')[2]
-        eval_on = '-'.join(cfg.exp_domains)
+        model_setting, epoch_setting = self.cfg.eval_load_path.split('/')[1], self.cfg.eval_load_path.split('/')[2]
+        eval_on = '-'.join(self.cfg.exp_domains)
         if data == 'test':
             eval_on += '_test'
-        if not os.path.exists(cfg.log_path):
-            os.mkdir(cfg.log_path)
-        log_file_name = os.path.join(cfg.log_path, model_setting+'-'+eval_on+'.json')
+        if not os.path.exists(self.cfg.log_path):
+            os.mkdir(self.cfg.log_path)
+        log_file_name = os.path.join(self.cfg.log_path, model_setting+'-'+eval_on+'.json')
         if os.path.exists(log_file_name):
             eval_to_json = json.load(open(log_file_name, 'r'))
             eval_to_json[epoch_setting] = eval_results
@@ -646,7 +641,7 @@ class Modal(object):
             logging.info('eos_r not in generated: ' + self.tokenizer.decode(generated))
         # eos_r_idx = generated.index(eos_r_id) if eos_r_id in generated else len(generated)-1
         
-        if cfg.use_true_curr_aspn:  # only predict resp
+        if self.cfg.use_true_curr_aspn:  # only predict resp
             decoded['resp'] = generated[: eos_r_idx+1]
         else:  # predicted aspn, resp
             eos_a_idx = generated.index(eos_a_id)
@@ -670,7 +665,7 @@ class Modal(object):
             eos_b_idx = len(generated)-1
         return generated[: eos_b_idx+1]
 
-def parse_arg_cfg(args):
+def parse_arg_cfg(args, cfg):
     # add args to cfg
     if args.cfg:
         for pair in args.cfg:
@@ -694,21 +689,28 @@ def main():
     if not os.path.exists('./experiments'):
         os.mkdir('./experiments')
 
-    if not os.path.exists('./experiments_21'):
-        os.mkdir('./experiments_21')
-
     parser = argparse.ArgumentParser()
-    parser.add_argument('-mode')
-    parser.add_argument('-cfg', nargs='*')
+    parser.add_argument('--mode')
+    parser.add_argument('--datasets_name', choices=['MultiWOZ_2.0', 'MultiWOZ_2.1', 'MultiWOZ_2.2'])
+    parser.add_argument('--cfg', nargs='*')
     args = parser.parse_args()
+
+    if args.datasets_name == 'MultiWOZ_2.0':
+        cfg = Config("../../data/dataset/multiwoz/MultiWOZ_2.0")
+    elif args.datasets_name == 'MultiWOZ_2.1':
+        cfg = Config("../../data/dataset/multiwoz/MultiWOZ_2.1")
+    elif args.datasets_name == 'MultiWOZ_2.2':
+        cfg = Config("../../data/dataset/multiwoz/MultiWOZ_2.1")
+    else:
+        raise Exception('还没这个数据集')
 
     cfg.mode = args.mode
     if args.mode == 'test' or args.mode == 'adjust':
-        parse_arg_cfg(args)
+        parse_arg_cfg(args, cfg)
         # cfg.model_path = cfg.eval_load_path
         cfg.gpt_path = cfg.eval_load_path
     else:  # train
-        parse_arg_cfg(args)
+        parse_arg_cfg(args, cfg)
         if cfg.exp_path in ['', 'to be generated']:
             # log file path, control the factors: seed, learning_rate, batch_size, early_stop_count, weight decay...
             # cfg.exp_path = 'experiments/{}_{}_sd{}_lr{}_bs{}_sp{}_dc{}/'.format('-'.join(cfg.exp_domains),
@@ -749,7 +751,7 @@ def main():
     np.random.seed(cfg.seed)
 
     # initialize model
-    m = Modal(device)
+    m = Modal(device, cfg)
 
     if args.mode == 'train':    # train
         if cfg.save_log:  # save cfg details.

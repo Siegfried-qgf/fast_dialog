@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import csv
+import sys
 import random
 import logging
 import json
@@ -9,19 +10,19 @@ import utils
 import ontology
 from copy import deepcopy
 from collections import OrderedDict
-from data.dataset.multiwoz.utils.db_ops import MultiWozDB
-from torch.utils.data import Dataset, DataLoader
+sys.path.append('../../../')
+from fast_dialog.data.dataset.multiwoz.utils.db_ops import MultiWozDB
 
-from config.config_ubar import global_config21 as cfg
+# from config.config_ubar import global_config20 as cfg
 # from config21 import global_config as cfg
 
 class _ReaderBase(object):
-
-    def __init__(self):
+    def __init__(self, cfg):
         self.train, self.dev, self.test = [], [], []
         self.vocab = None
         self.db = None
         self.set_stats = {}
+        self.cfg = cfg
 
     def _bucket_by_turn(self, encoded_data):
         turn_bucket = {}
@@ -44,15 +45,15 @@ class _ReaderBase(object):
         batch = []
         for dial in data:
             batch.append(dial)
-            if len(batch) == cfg.batch_size:
+            if len(batch) == self.cfg.batch_size:
                 # print('batch size: %d, batch num +1'%(len(batch)))
                 all_batches.append(batch)
                 batch = []
         # if remainder > 1/2 batch_size, just put them in the previous batch, otherwise form a new batch
         # print('last batch size: %d, batch num +1'%(len(batch)))
-        if (len(batch) % len(cfg.cuda_device)) != 0:
-            batch = batch[:-(len(batch) % len(cfg.cuda_device))]
-        if len(batch) > 0.5 * cfg.batch_size:
+        if (len(batch) % len(self.cfg.cuda_device)) != 0:
+            batch = batch[:-(len(batch) % len(self.cfg.cuda_device))]
+        if len(batch) > 0.5 * self.cfg.batch_size:
             all_batches.append(batch)
         elif len(all_batches):
             all_batches[-1].extend(batch)
@@ -143,7 +144,7 @@ class _ReaderBase(object):
         log_str = ''
         name_to_set = {'train': self.train, 'test': self.test, 'dev': self.dev}
         dial = name_to_set[set_name]
-        if cfg.low_resource and set_name == 'train':
+        if self.cfg.low_resource and set_name == 'train':
             # dial = random.sample(dial, int(len(dial)*0.01))
             dial = random.sample(dial, 100)
             logging.info('Low Resource setting, finetuning size: {}'.format(len(dial)))
@@ -194,7 +195,7 @@ class _ReaderBase(object):
             yield self.transpose_batch(batch)
 
     def save_result(self, write_mode, results, field, write_title=False):
-        with open(cfg.result_path, write_mode) as rf:
+        with open(self.cfg.result_path, write_mode) as rf:
             if write_title:
                 rf.write(write_title+'\n')
             writer = csv.DictWriter(rf, fieldnames=field)
@@ -215,20 +216,20 @@ class _ReaderBase(object):
         #         for res in results:
         #             a,b,c,d = res['joint_goal_delex'], res['slot_acc_delex'], res['slot_f1_delex'], res['act_f1']
         #             rf.write('%2.1f\t%2.1f\t%2.1f\t%2.1f\n'%(a,b,c,d))
-        ctr_save_path = cfg.result_path[:-4] + '_report_ctr%s.csv' % cfg.seed
+        ctr_save_path = self.cfg.result_path[:-4] + '_report_ctr%s.csv' % self.cfg.seed
         write_title = False if os.path.exists(ctr_save_path) else True
-        if cfg.aspn_decode_mode == 'greedy':
+        if self.cfg.aspn_decode_mode == 'greedy':
             setting = ''
-        elif cfg.aspn_decode_mode == 'beam':
-            setting = 'width=%s' % str(cfg.beam_width)
-            if cfg.beam_diverse_param > 0:
-                setting += ', penalty=%s' % str(cfg.beam_diverse_param)
-        elif cfg.aspn_decode_mode == 'topk_sampling':
-            setting = 'topk=%s' % str(cfg.topk_num)
-        elif cfg.aspn_decode_mode == 'nucleur_sampling':
-            setting = 'p=%s' % str(cfg.nucleur_p)
-        res = {'exp': cfg.eval_load_path, 'true_bspn': cfg.use_true_curr_bspn, 'true_aspn': cfg.use_true_curr_aspn,
-               'decode': cfg.aspn_decode_mode, 'param': setting, 'nbest': cfg.nbest, 'selection_sheme': cfg.act_selection_scheme,
+        elif self.cfg.aspn_decode_mode == 'beam':
+            setting = 'width=%s' % str(self.cfg.beam_width)
+            if self.cfg.beam_diverse_param > 0:
+                setting += ', penalty=%s' % str(self.cfg.beam_diverse_param)
+        elif self.cfg.aspn_decode_mode == 'topk_sampling':
+            setting = 'topk=%s' % str(self.cfg.topk_num)
+        elif self.cfg.aspn_decode_mode == 'nucleur_sampling':
+            setting = 'p=%s' % str(self.cfg.nucleur_p)
+        res = {'exp': self.cfg.eval_load_path, 'true_bspn': self.cfg.use_true_curr_bspn, 'true_aspn': self.cfg.use_true_curr_aspn,
+               'decode': self.cfg.aspn_decode_mode, 'param': setting, 'nbest': self.cfg.nbest, 'selection_sheme': self.cfg.act_selection_scheme,
                'match': results[0]['match'], 'success': results[0]['success'], 'bleu': results[0]['bleu'], 'act_f1': results[0]['act_f1'],
                'avg_act_num': results[0]['avg_act_num'], 'avg_diverse': results[0]['avg_diverse_score']}
         with open(ctr_save_path, 'a') as rf:
@@ -239,28 +240,28 @@ class _ReaderBase(object):
 
 
 class MultiWozReader(_ReaderBase):
-    def __init__(self, tokenizer):
-        super().__init__()
+    def __init__(self, tokenizer, cfg):
+        super().__init__(cfg)
         self.nlp = spacy.load('en_core_web_sm')
 
-        self.db = MultiWozDB(cfg.dbs)
+        self.db = MultiWozDB(self.cfg.dbs)
         self.vocab_size = self._build_vocab()
 
         # self.tokenizer = GPT2Tokenizer.from_pretrained(cfg.gpt_path) # add special tokens later
         self.tokenizer = tokenizer
-        if cfg.mode=='train':
+        if self.cfg.mode=='train':
             self.add_sepcial_tokens()
 
-        self.domain_files = json.loads(open(cfg.domain_file_path, 'r').read())
+        self.domain_files = json.loads(open(self.cfg.domain_file_path, 'r').read())
         self.slot_value_set = json.loads(
-            open(cfg.slot_value_set_path, 'r').read())
-        if cfg.multi_acts_training:
-            self.multi_acts = json.loads(open(cfg.multi_acts_path, 'r').read())
+            open(self.cfg.slot_value_set_path, 'r').read())
+        if self.cfg.multi_acts_training:
+            self.multi_acts = json.loads(open(self.cfg.multi_acts_path, 'r').read())
 
         test_list = [l.strip().lower()
-                     for l in open(cfg.test_list, 'r').readlines()]
+                     for l in open(self.cfg.test_list, 'r').readlines()]
         dev_list = [l.strip().lower()
-                    for l in open(cfg.dev_list, 'r').readlines()]
+                    for l in open(self.cfg.dev_list, 'r').readlines()]
         self.dev_files, self.test_files = {}, {}
         for fn in test_list:
             self.test_files[fn.replace('.json', '')] = 1
@@ -278,8 +279,8 @@ class MultiWozReader(_ReaderBase):
         #         for fn in fn_list:
         #             self.exp_files[fn.replace('.json', '')] = 1
         all_domains_list = list(self.domain_files.keys())
-        if 'all' not in cfg.exp_domains:
-            domains = self.get_exp_domains(cfg.exp_domains, all_domains_list)
+        if 'all' not in self.cfg.exp_domains:
+            domains = self.get_exp_domains(self.cfg.exp_domains, all_domains_list)
             logging.info(domains)
             for domain in domains:
                 fn_list = self.domain_files.get(domain)
@@ -292,9 +293,9 @@ class MultiWozReader(_ReaderBase):
 
         self._load_data()
 
-        if cfg.limit_bspn_vocab:
+        if self.cfg.limit_bspn_vocab:
             self.bspn_masks = self._construct_bspn_constraint()
-        if cfg.limit_aspn_vocab:
+        if self.cfg.limit_aspn_vocab:
             self.aspn_masks = self._construct_aspn_constraint()
 
         self.multi_acts_record = None
@@ -363,11 +364,11 @@ class MultiWozReader(_ReaderBase):
         self.tokenizer.add_special_tokens(special_tokens_dict)
         logging.info('Added special tokens to gpt tokenizer.')
 
-        cfg.pad_id = self.tokenizer.encode('<pad>')[0]
+        self.cfg.pad_id = self.tokenizer.encode('<pad>')[0]
 
     def _build_vocab(self):
-        self.vocab = utils.Vocab(cfg.vocab_size)
-        vp = cfg.vocab_path_train if cfg.mode == 'train' or cfg.vocab_path_eval is None else cfg.vocab_path_eval
+        self.vocab = utils.Vocab(self.cfg.vocab_size)
+        vp = self.cfg.vocab_path_train if self.cfg.mode == 'train' or self.cfg.vocab_path_eval is None else self.cfg.vocab_path_eval
         # vp = cfg.vocab_path+'.json.freq.json'
         self.vocab.load_vocab(vp)
         return self.vocab.vocab_size
@@ -469,20 +470,20 @@ class MultiWozReader(_ReaderBase):
         load processed data and encode, or load already encoded data
         """
         if save_temp: # save encoded data
-            if 'all' in cfg.exp_domains:
-                encoded_file = os.path.join(cfg.data_path, 'new_db_se_blank_encoded.data.json') 
+            if 'all' in self.cfg.exp_domains:
+                encoded_file = os.path.join(self.cfg.data_path, 'new_db_se_blank_encoded.data.json') 
                 # encoded: no sos, se_encoded: sos and eos
                 # db: add db results every turn
             else:
                 xdomain_dir = './experiments_Xdomain/data'
                 if not os.path.exists(xdomain_dir):
                     os.makedirs(xdomain_dir)
-                encoded_file = os.path.join(xdomain_dir, '{}-encoded.data.json'.format('-'.join(cfg.exp_domains))) 
+                encoded_file = os.path.join(xdomain_dir, '{}-encoded.data.json'.format('-'.join(self.cfg.exp_domains))) 
 
             if os.path.exists(encoded_file):
                 logging.info('Reading encoded data from {}'.format(encoded_file))
                 self.data = json.loads(
-                    open(cfg.data_path+cfg.data_file, 'r', encoding='utf-8').read().lower())
+                    open(self.cfg.data_path+self.cfg.data_file, 'r', encoding='utf-8').read().lower())
                 encoded_data = json.loads(open(encoded_file, 'r', encoding='utf-8').read())
                 self.train = encoded_data['train']
                 self.dev = encoded_data['dev']
@@ -491,12 +492,12 @@ class MultiWozReader(_ReaderBase):
                 logging.info('Encoding data now and save the encoded data in {}'.format(encoded_file))
                 # not exists, encode data and save
                 self.data = json.loads(
-                    open(cfg.data_path+cfg.data_file, 'r', encoding='utf-8').read().lower())
+                    open(self.cfg.data_path+self.cfg.data_file, 'r', encoding='utf-8').read().lower())
                 self.train, self.dev, self.test = [], [], []
                 for fn, dial in self.data.items():
                     if '.json' in fn:
                         fn = fn.replace('.json', '')
-                    if 'all' in cfg.exp_domains or self.exp_files.get(fn):
+                    if 'all' in self.cfg.exp_domains or self.exp_files.get(fn):
                         if self.dev_files.get(fn):
                             self.dev.append(self._get_encoded_data(fn, dial))
                         elif self.test_files.get(fn):
@@ -510,12 +511,12 @@ class MultiWozReader(_ReaderBase):
         
         else: # directly read processed data and encode
             self.data = json.loads(
-                open(cfg.data_path+cfg.data_file, 'r', encoding='utf-8').read().lower())
+                open(self.cfg.data_path+self.cfg.data_file, 'r', encoding='utf-8').read().lower())
             self.train, self.dev, self.test = [], [], []
             for fn, dial in self.data.items():
                 if '.json' in fn:
                     fn = fn.replace('.json', '')
-                if 'all' in cfg.exp_domains or self.exp_files.get(fn):
+                if 'all' in self.cfg.exp_domains or self.exp_files.get(fn):
                     if self.dev_files.get(fn):
                         self.dev.append(self._get_encoded_data(fn, dial))
                     elif self.test_files.get(fn):
@@ -591,7 +592,7 @@ class MultiWozReader(_ReaderBase):
             enc['pointer'] = [int(i) for i in t['pointer'].split(',')]
             enc['turn_domain'] = t['turn_domain'].split()
             enc['turn_num'] = t['turn_num']
-            if cfg.multi_acts_training:
+            if self.cfg.multi_acts_training:
                 enc['aspn_aug'] = []
                 if fn in self.multi_acts:
                     turn_ma = self.multi_acts[fn].get(str(idx), {})
@@ -728,8 +729,8 @@ class MultiWozReader(_ReaderBase):
         context_list = []
         # predict_list = []
         prompt = ''
-        if cfg.use_true_curr_bspn:
-            if cfg.use_true_curr_aspn: # only predict resp
+        if self.cfg.use_true_curr_bspn:
+            if self.cfg.use_true_curr_aspn: # only predict resp
                 context_list = ['user', 'bspn', 'db','aspn']
                 # context_list = ['user','aspn'] # predict resp based on current aspn and bspn
                 # predict_list = ['resp']
@@ -768,7 +769,7 @@ class MultiWozReader(_ReaderBase):
             # inputs['context'] = context + self.tokenizer.encode([prompt])
             # context just the current action
 
-            if cfg.use_all_previous_context:
+            if self.cfg.use_all_previous_context:
                 inputs['labels'] = pv_context + context # use all previous ubar history
             else:
                 inputs['labels'] = context# use privosu trun
@@ -791,8 +792,8 @@ class MultiWozReader(_ReaderBase):
         context_list = []
         predict_list = []
         prompt = ''
-        if cfg.use_true_curr_bspn:
-            if cfg.use_true_curr_aspn: # only predict resp
+        if self.cfg.use_true_curr_bspn:
+            if self.cfg.use_true_curr_aspn: # only predict resp
                 context_list = ['user', 'bspn', 'db','aspn']
                 # context_list = ['user','aspn'] # predict resp based on current aspn and bspn
                 predict_list = ['resp']
@@ -832,7 +833,7 @@ class MultiWozReader(_ReaderBase):
             # inputs['context'] = context + self.tokenizer.encode([prompt])
             # context just the current action
 
-            if cfg.use_all_previous_context:
+            if self.cfg.use_all_previous_context:
                 inputs['labels'] = pv_context + context # use all previous ubar history
             else:
                 inputs['labels'] = context# use privosu trun
@@ -864,7 +865,7 @@ class MultiWozReader(_ReaderBase):
             contexts.append(context)
         
         inputs['contexts'] = contexts
-        inputs['contexts_np'], inputs['lengths'] = utils.padSeqs_gpt(inputs['contexts'], cfg.pad_id)
+        inputs['contexts_np'], inputs['lengths'] = utils.padSeqs_gpt(inputs['contexts'], self.cfg.pad_id)
         return inputs
 
     def convert_batch_turn(self, turn_batch, pv_batch, first_turn=False):
@@ -888,7 +889,7 @@ class MultiWozReader(_ReaderBase):
                 label = u + r
                 labels.append(label)
             inputs['contexts'] = contexts
-            inputs['contexts_np'], inputs['lengths'] = utils.padSeqs_gpt(inputs['contexts'], cfg.pad_id)
+            inputs['contexts_np'], inputs['lengths'] = utils.padSeqs_gpt(inputs['contexts'], self.cfg.pad_id)
 
             inputs['labels'] = labels
         else:
@@ -902,7 +903,7 @@ class MultiWozReader(_ReaderBase):
                 label = ur + u + r
                 labels.append(label)
             inputs['contexts'] = contexts
-            contexts_np, lengths = utils.padSeqs_gpt(inputs['contexts'], cfg.pad_id)
+            contexts_np, lengths = utils.padSeqs_gpt(inputs['contexts'], self.cfg.pad_id)
             inputs['contexts_np'] = contexts_np
             inputs['lengths'] = lengths
 
@@ -927,7 +928,7 @@ class MultiWozReader(_ReaderBase):
                 contexts.append(context)
             inputs['contexts'] = contexts
             # padSeqs to make [UBAR] the same length
-            inputs['contexts_np'], inputs['lengths'] = utils.padSeqs_gpt(inputs['contexts'], cfg.pad_id)
+            inputs['contexts_np'], inputs['lengths'] = utils.padSeqs_gpt(inputs['contexts'], self.cfg.pad_id)
         else:
             contexts = []
             batch_zipped = zip(pv_batch['pv_usdx'], pv_batch['pv_bspn'], pv_batch['pv_aspn'], pv_batch['pv_resp'],
@@ -936,7 +937,7 @@ class MultiWozReader(_ReaderBase):
                 context = pu + pb + pa + pr + u + b + a + r
                 contexts.append(context)
             inputs['contexts'] = contexts
-            contexts_np, lengths = utils.padSeqs_gpt(inputs['contexts'], cfg.pad_id)
+            contexts_np, lengths = utils.padSeqs_gpt(inputs['contexts'], self.cfg.pad_id)
             inputs['contexts_np'] = contexts_np
             inputs['lengths'] = lengths
         return inputs
@@ -952,14 +953,14 @@ class MultiWozReader(_ReaderBase):
             for item, py_list in py_prev.items():
                 if py_list is None:
                     continue
-                if not cfg.enable_aspn and 'aspn' in item:
+                if not self.cfg.enable_aspn and 'aspn' in item:
                     continue
-                if not cfg.enable_bspn and 'bspn' in item:
+                if not self.cfg.enable_bspn and 'bspn' in item:
                     continue
-                if not cfg.enable_dspn and 'dspn' in item:
+                if not self.cfg.enable_dspn and 'dspn' in item:
                     continue
                 prev_np = utils.padSeqs(
-                    py_list, truncated=cfg.truncated, trunc_method='pre')
+                    py_list, truncated=self.cfg.truncated, trunc_method='pre')
                 inputs[item+'_np'] = prev_np
                 if item in ['pv_resp', 'pv_bspn']:
                     inputs[item+'_unk_np'] = deepcopy(inputs[item+'_np'])
@@ -970,18 +971,18 @@ class MultiWozReader(_ReaderBase):
                     inputs[item+'_unk_np'] = inputs[item+'_np']
 
         for item in ['user', 'usdx', 'resp', 'bspn', 'aspn', 'bsdx', 'dspn']:
-            if not cfg.enable_aspn and item == 'aspn':
+            if not self.cfg.enable_aspn and item == 'aspn':
                 continue
-            if not cfg.enable_bspn and item == 'bspn':
+            if not self.cfg.enable_bspn and item == 'bspn':
                 continue
 
-            if not cfg.enable_dspn and item == 'dspn':
+            if not self.cfg.enable_dspn and item == 'dspn':
                 continue
             py_list = py_batch[item]
             trunc_method = 'post' if item == 'resp' else 'pre'
             # max_length = cfg.max_nl_length if item in ['user', 'usdx', 'resp'] else cfg.max_span_length
             inputs[item+'_np'] = utils.padSeqs(
-                py_list, truncated=cfg.truncated, trunc_method=trunc_method)
+                py_list, truncated=self.cfg.truncated, trunc_method=trunc_method)
             if item in ['user', 'usdx', 'resp', 'bspn']:
                 inputs[item+'_unk_np'] = deepcopy(inputs[item+'_np'])
                 inputs[item+'_unk_np'][inputs[item+'_unk_np']
@@ -989,7 +990,7 @@ class MultiWozReader(_ReaderBase):
             else:
                 inputs[item+'_unk_np'] = inputs[item+'_np']
 
-        if cfg.multi_acts_training and cfg.mode == 'train':
+        if self.cfg.multi_acts_training and self.cfg.mode == 'train':
             inputs['aspn_bidx'], multi_aspn = [], []
             for bidx, aspn_type_list in enumerate(py_batch['aspn_aug']):
                 if aspn_type_list:
@@ -999,8 +1000,8 @@ class MultiWozReader(_ReaderBase):
                         aspn = aspn_list[0]
                         multi_aspn.append(aspn)
                         inputs['aspn_bidx'].append(bidx)
-                        if cfg.multi_act_sampling_num > 1:
-                            for i in range(cfg.multi_act_sampling_num):
+                        if self.cfg.multi_act_sampling_num > 1:
+                            for i in range(self.cfg.multi_act_sampling_num):
                                 if len(aspn_list) >= i+2:
                                     # choose one random act span in each act type
                                     aspn = aspn_list[i+1]
@@ -1009,7 +1010,7 @@ class MultiWozReader(_ReaderBase):
 
             if multi_aspn:
                 inputs['aspn_aug_np'] = utils.padSeqs(
-                    multi_aspn, truncated=cfg.truncated, trunc_method='pre')
+                    multi_aspn, truncated=self.cfg.truncated, trunc_method='pre')
                 # [all available aspn num in the batch, T]
                 inputs['aspn_aug_unk_np'] = inputs['aspn_aug_np']
 
@@ -1086,10 +1087,10 @@ class MultiWozReader(_ReaderBase):
         results = []
         eos_syntax = ontology.eos_tokens if not eos_syntax else eos_syntax
 
-        if cfg.bspn_mode == 'bspn':
+        if self.cfg.bspn_mode == 'bspn':
             field = ['dial_id', 'turn_num', 'user', 'bspn_gen', 'bspn', 'resp_gen', 'resp', 'aspn_gen', 'aspn',
                      'dspn_gen', 'dspn', 'pointer']
-        elif not cfg.enable_dst: # this
+        elif not self.cfg.enable_dst: # this
             field = ['dial_id', 'turn_num', 'user', 'bsdx_gen', 'bsdx', 'resp_gen', 'resp', 'aspn_gen', 'aspn',
                      'dspn_gen', 'dspn', 'bspn', 'pointer']
         else:
@@ -1204,7 +1205,7 @@ class MultiWozReader(_ReaderBase):
                 act_collect = {}
                 act_type_collect = {}
                 slot_score = 0
-                for i in range(cfg.nbest):
+                for i in range(self.cfg.nbest):
                     aspn = decode_fn(turn['multi_act'][i],
                                      eos=ontology.eos_tokens['aspn'])
                     pred_acts = self.aspan_to_act_list(' '.join(aspn))
@@ -1229,7 +1230,7 @@ class MultiWozReader(_ReaderBase):
 
         dialog_record = {}
 
-        with open(cfg.eval_load_path + '/dialogue_record.csv', 'w') as rf:
+        with open(self.cfg.eval_load_path + '/dialogue_record.csv', 'w') as rf:
             writer = csv.writer(rf)
 
             for dial_id in ordered_dial:
@@ -1260,7 +1261,7 @@ class MultiWozReader(_ReaderBase):
                     resp_col = []
                     aspn_col = []
                     resp_restore_col = []
-                    for i in range(cfg.nbest):
+                    for i in range(self.cfg.nbest):
                         aspn = decode_fn(
                             turn['multi_act'][i], eos=ontology.eos_tokens['aspn'])
                         resp = decode_fn(
@@ -1280,7 +1281,7 @@ class MultiWozReader(_ReaderBase):
                     turn_record['aspn_col'] = aspn_col
                     turn_record['resp_col'] = resp_col
                     turn_record['resp_res_col'] = resp_restore_col
-                    for i in range(cfg.nbest):
+                    for i in range(self.cfg.nbest):
                         # aspn = decode_fn(turn['multi_act'][i], eos=ontology.eos_tokens['aspn'])
                         resp = resp_col[i]
                         aspn = aspn_col[i]

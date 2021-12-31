@@ -1,6 +1,6 @@
 import logging, time, os
 
-class _Config:
+class Config:
     def __init__(self,data_prefix):
         self._multiwoz_damd_init(data_prefix)
         self.data_prefix = data_prefix
@@ -27,6 +27,8 @@ class _Config:
         self.domain_file_path = self.data_prefix + '/multi-woz-processed/domain_files.json'
         self.slot_value_set_path = self.data_prefix + '/db/value_set_processed.json'
         #self.multi_acts_path = 'data/dataset/multiwoz20/data/multi-woz-processed/multi_act_mapping_train.json'
+        self.fine_processed_path = self.data_prefix + '/multi-woz-fine-processed/'
+        self.mapping_pair_path = self.data_prefix + '/mapping.pair'
         self.exp_path = 'to be generated'
         self.log_time = time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())
 
@@ -148,8 +150,8 @@ class _Config:
         logger = logging.getLogger()
         logger.setLevel(logging.INFO)
 
-global_config20 = _Config("../../data/dataset/multiwoz/MultiWOZ_2.0")
-global_config21 = _Config("../../data/dataset/multiwoz/MultiWOZ_2.1")
-global_config22 = _Config("../../data/dataset/multiwoz/MultiWOZ_2.2")
+# global_config20 = _Config("../../data/dataset/multiwoz/MultiWOZ_2.0")
+# global_config21 = _Config("../../data/dataset/multiwoz/MultiWOZ_2.1")
+# global_config22 = _Config("../../data/dataset/multiwoz/MultiWOZ_2.2")
 
 

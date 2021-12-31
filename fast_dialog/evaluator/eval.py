@@ -1,10 +1,11 @@
 import math, logging, copy, json
 from collections import Counter, OrderedDict
 from nltk.util import ngrams
+from fast_dialog.evaluator.clean_dataset import clean_slot_values
 
-import ontology
-from config.config_dmad import global_config as cfg
-from evaluator.clean_dataset import clean_slot_values #TODO clean_dataset 重复
+import sys
+sys.path.append('..')
+from fast_dialog.model.pptod import ontology
 
 class BLEUScorer(object):
     ## BLEU score calculator via GentScorer interface
@@ -112,7 +113,7 @@ class MultiWozEvaluator(object):
         # only evaluate these slots for dialog success
         self.requestables = ['phone', 'address', 'postcode', 'reference', 'id']
         self.data_prefix = self.cfg.data_prefix
-        self.mapping_pair_path = self.data_prefix + '/mapping.pair'
+        self.mapping_pair_path = self.cfg.mapping_pair_path
 
     def wrap_evaluation_result(self, result_list):
         field = ['dial_id', 'turn_num', 'user', 'bspn_gen', 'bsdx', 'resp_gen', 'resp', 'aspn_gen', 'aspn',

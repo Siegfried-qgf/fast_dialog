@@ -1,5 +1,3 @@
-import logging, time, os
-
 class Config:
     def __init__(self, data_prefix):
         # data_prefix = r'../data/'
@@ -24,6 +22,8 @@ class Config:
         }
         self.domain_file_path = self.data_prefix + '/multi-woz-processed/domain_files.json'
         self.slot_value_set_path = self.data_prefix + '/db/value_set_processed.json'
+        self.fine_processed_path = self.data_prefix + '/multi-woz-fine-processed/'
+        self.mapping_pair_path = self.data_prefix + '/mapping.pair'
 
         self.exp_domains = ['all'] # hotel,train, attraction, restaurant, taxi
 
@@ -37,4 +37,3 @@ class Config:
         self.exp_domains = ['all'] # hotel,train, attraction, restaurant, taxi
         self.max_context_length = 900
         self.vocab_size = 3000
-

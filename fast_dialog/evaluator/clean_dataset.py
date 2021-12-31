@@ -2,7 +2,7 @@
 import re
 import sys
 sys.path.append('..')
-from model.pptod import ontology
+from fast_dialog.model.pptod import ontology
 
 def my_clean_text(text):
     text = re.sub(r'([a-zT]+)\.([a-z])', r'\1 . \2', text)   # 'abc.xyz' -> 'abc . xyz'
