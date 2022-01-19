@@ -101,7 +101,6 @@ class MultiWozEvaluator(object):
         self.all_data = self.reader.data
         self.test_data = self.reader.test
         self.cfg = cfg
-        self.set_attribute()
 
         self.bleu_scorer = BLEUScorer()
 
@@ -251,18 +250,6 @@ class MultiWozEvaluator(object):
             return metric_result
         else:
             return None
-
-    def set_attribute(self):
-        self.cfg.use_true_prev_bspn = True
-        self.cfg.use_true_prev_aspn = True
-        self.cfg.use_true_db_pointer = True
-        self.cfg.use_true_prev_resp = True
-        self.cfg.use_true_pv_resp = True
-        self.cfg.same_eval_as_cambridge = True
-        self.cfg.use_true_domain_for_ctr_eval = True
-        self.cfg.use_true_bspn_for_ctr_eval = False
-        self.cfg.use_true_curr_bspn = False
-        self.cfg.use_true_curr_aspn = False
 
     def bleu_metric(self, data, eval_dial_list=None):
         gen, truth = [],[]

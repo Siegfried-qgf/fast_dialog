@@ -37,3 +37,15 @@ class Config:
         self.exp_domains = ['all'] # hotel,train, attraction, restaurant, taxi
         self.max_context_length = 900
         self.vocab_size = 3000
+
+        # self.use_true_prev_bspn = True
+        # self.use_true_prev_aspn = True
+        # self.use_true_db_pointer = True
+        # self.use_true_prev_resp = True
+        # self.use_true_pv_resp = True
+        
+        self.same_eval_as_cambridge = True
+        self.use_true_domain_for_ctr_eval = True
+        self.use_true_bspn_for_ctr_eval = False
+        self.use_true_curr_bspn = False
+        self.use_true_curr_aspn = False
